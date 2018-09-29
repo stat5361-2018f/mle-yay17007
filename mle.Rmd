@@ -1,0 +1,198 @@
+---
+title: "MLE"
+author: "Yaqiong Yao"
+date: "9/28/2018"
+output: pdf_document
+---
+
+# 3.3.2 Many local maxima
+
+## 1
+
+The log-likelihood function of this distribution is
+
+$$ \ell(\mathbf{x}, \theta) = \sum_{i=1}^n \log\{1-\cos(x_i-\theta)\} - n\log2\pi$$
+
+
+```{r}
+x <- c(3.91, 4.85, 2.28, 4.06, 3.70, 4.04, 5.46, 3.53, 2.28, 1.96,
+       2.53, 3.88, 2.22, 3.47, 4.82, 2.46, 2.99, 2.54, 0.52)
+
+loglikelihood <- function(theta){
+  n <- length(x)
+  s <- sum(log(1-cos(x-theta))) + n*log(2*pi)
+  return(s)
+}
+loglikelihood <- Vectorize(loglikelihood)
+curve(loglikelihood, -pi, pi, xlab = expression(theta), ylab = "log-likelihood")
+```
+
+## 2
+
+The expectation of $\mathbf{x}|\theta$ is
+\begin{align*}
+\mathbb E (x | \theta) &= \int_{0}^{2\pi} x \frac{1-\cos(x-\theta)}{2\pi} dx \\
+&= \frac{1}{2\pi} \int_{0}^{2\pi} x - x\cos(x-\theta) dx \\
+&= \pi + \sin(\theta) \\
+&= \bar{X_n}
+\end{align*}
+
+Thus, 
+
+```{r}
+theta_tilde <- asin(mean(x)-pi)
+theta_tilde
+```
+
+## 3
+
+Since
+
+$$\frac{\partial\ell(\mathbf{x}; \theta)}{\partial\theta} = \sum_{i=1}^n \frac{-\sin(x_i - \theta)}{1-\cos(x_i-\theta)}$$
+
+$$\frac{\partial^2\ell(\mathbf{x}; \theta)}{\partial \theta^2} = \sum_{i=1}^n \frac{\cos(x_i-\theta) - \cos^2(x_i-\theta)-\sin^2(x_i-\theta)}{(1-\cos(x_i-\theta))^2}$$
+
+The Newton-Raphson method is
+
+$$\hat\theta^{(t+1)} = \hat\theta^{(t)} - \left\{\frac{\partial^2\ell(\mathbf{x}; \hat\theta^{(t)})}{\partial \theta^2}\right\}^{-1}\frac{\partial\ell(\mathbf{x}; \hat\theta^{(t)})}{\partial\theta}$$
+
+```{r}
+lfd <- function(theta){
+  sum(-sin(x-theta)/(1-cos(x-theta)))
+}
+
+lsd <- function(theta){
+  sum((cos(x-theta) - (cos(x-theta))^2 - (sin(x-theta))^2)/(1-cos(x-theta))^2)
+}
+
+Newton <- function(init){
+  theta0 <- init
+  i <- 0
+  diff <- 1
+  msg <- "converge"
+  while(abs(diff) > 0.0000001){
+    lfd <- lfd(theta0)
+    lsd <- lsd(theta0)
+    diff <- (lfd/lsd)
+    theta1 <- theta0 - diff
+    theta0 <- theta1
+    i <- i+1
+    #cat(i)
+    if(i >= 150){
+      msg <- "Not converge"
+      theta0 <- Inf
+      break
+    }
+  }
+  return(list(theta = theta0, itr = i, msg = msg))
+}
+Newton(theta_tilde)
+```
+
+## 4
+
+```{r}
+Newton(-2.7)
+Newton(2.7)
+```
+
+The $\hat\theta$ we got is different.
+
+## 5
+
+```{r}
+init <- seq(-pi, pi, length.out=200)
+result <- NULL
+for(initi in init){
+  result <- rbind(result, c(initi, Newton(initi)$theta))
+}
+colnames(result) <- c("Initial_value", "theta_hat")
+split(result, result[,2])
+```
+
+# Modeling beetle data
+
+## 1
+
+```{r}
+beetles <- data.frame(
+    days = c(0,  8,  28,  41,  63,  69,   97, 117,  135,  154),
+    beetles = c(2, 47, 192, 256, 768, 896, 1120, 896, 1184, 1024))
+
+b_func <- function(r, K, t){
+  (2*K)/(2 + (K - 2)*exp(-r*t))
+}
+
+nls(beetles ~ b_func(r, K,days), data = beetles, start = list(r = 0.2, K = 1000))
+```
+
+## 2
+
+```{r}
+sse <- function(r,K){
+  sum((beetles$beetles-b_func(r,K,beetles$days))^2)
+}
+r <- seq(0.05, 0.15, 0.0001)
+K <- seq(500, 1500, 10)
+z <- outer(r,K,Vectorize(sse))
+contour(r, K, z)
+```
+
+
+## 3
+
+Since we know that $\log N_t \sim \mathbb{N}(\log f(t), \sigma^2)$.
+
+
+```{r}
+loglikelihood <- function(par){
+  r <- par[1]
+  K <- par[2]
+  sigma2 <- par[3]
+  5*log(2*pi*sigma2) + sum((log(beetles$beetles)-log((2*K)/(2+(K-2)*exp(-r*beetles$days))))^2/(2*sigma2))
+}
+
+(optim <- optim(c(0.2, 1000, 0.4), loglikelihood, method = "BFGS", hessian = TRUE))
+```
+
+The variance of the estimates are:
+
+```{r}
+fisher_info <- solve(optim$hessian)
+(prop_sigma <- sqrt(diag(fisher_info)))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
